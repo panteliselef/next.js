@@ -83,19 +83,19 @@ export function getOrCreatePrefetchCacheEntry({
       existingCacheEntry.kind !== PrefetchKind.FULL &&
       kind === PrefetchKind.FULL
 
-    const hasReusableLoadingState =
-      // If staletime is 0, we'd be throwing away the prefetch entry every navigation.
-      // This means we'd never get a chance to re-use the previous loading state, de-opting out of instant navigations.
-      PREFETCH_STALE_TIME === 0 &&
-      (existingCacheEntry.loadingStatus === PrefetchCacheEntryStatus.fresh ||
-        existingCacheEntry.loadingStatus === PrefetchCacheEntryStatus.reusable)
     const hasReusableData =
       existingCacheEntry.status === PrefetchCacheEntryStatus.reusable ||
       existingCacheEntry.status === PrefetchCacheEntryStatus.fresh
 
-    // we'll let the router use the existing prefetch entry if anything can be reused (loading state, or the data itself)
+    const hasReusableLoading =
+      // If prefetches are immediately considered stale, we don't want to continuously re-prefetch the loading state.
+      PREFETCH_STALE_TIME === 0 &&
+      (existingCacheEntry.loadingStatus === PrefetchCacheEntryStatus.reusable ||
+        existingCacheEntry.loadingStatus === PrefetchCacheEntryStatus.fresh)
+
+    // we'll let the router use the existing prefetch entry if anything can be reused
     // otherwise we will fetch fresh data from the server and update the cache entry
-    const hasReusablePrefetch = hasReusableLoadingState || hasReusableData
+    const hasReusablePrefetch = hasReusableData || hasReusableLoading
 
     if (switchedToFullPrefetch || !hasReusablePrefetch) {
       return createLazyPrefetchEntry({
