@@ -48,21 +48,26 @@ describe('jsconfig.json baseurl', () => {
       const basicPage = join(appDir, 'pages/hello.js')
       const contents = await fs.readFile(basicPage, 'utf8')
 
-      await fs.writeFile(
-        basicPage,
-        contents.replace('components/world', 'components/worldd')
-      )
-      await renderViaHTTP(appPort, '/hello')
+      try {
+        const $ = await get$('/hello')
+        expect($('body').text()).toMatch(/World/)
 
-      const found = await check(
-        () => stripAnsi(output),
-        process.env.TURBOPACK
-          ? /unable to resolve module "components\/worldd"/
-          : /Module not found: Can't resolve 'components\/worldd'/,
-        false
-      )
-      await fs.writeFile(basicPage, contents)
-      expect(found).toBe(true)
+        await fs.writeFile(
+          basicPage,
+          contents.replace('components/world', 'components/worldd')
+        )
+
+        await renderViaHTTP(appPort, '/hello')
+
+        const found = await check(
+          () => stripAnsi(output),
+          /Module not found: Can't resolve 'components\/worldd'/,
+          false
+        )
+        expect(found).toBe(true)
+      } finally {
+        await fs.writeFile(basicPage, contents)
+      }
     })
   })
 

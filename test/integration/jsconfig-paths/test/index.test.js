@@ -67,16 +67,16 @@ function runTests() {
       const contents = await fs.readFile(basicPage, 'utf8')
 
       try {
+        const $ = await get$('/basic-alias')
+        expect($('body').text()).toMatch(/World/)
+
         await fs.writeFile(basicPage, contents.replace('@c/world', '@c/worldd'))
         await renderViaHTTP(appPort, '/basic-alias')
 
         const found = await check(
           () => stripAnsi(output),
-          process.env.TURBOPACK
-            ? /unable to resolve module "@c\/worldd"/
-            : /Module not found: Can't resolve '@c\/worldd'/,
-          false,
-          10
+          /Module not found: Can't resolve '@c\/worldd'/,
+          false
         )
         expect(found).toBe(true)
       } finally {
