@@ -377,6 +377,59 @@ describe('app dir - navigation', () => {
     })
   })
 
+  describe('forbidden', () => {
+    it('should trigger forbidden in a server component', async () => {
+      const browser = await next.browser('/forbidden/servercomponent')
+
+      expect(
+        await browser.waitForElementByCss('#forbidden-component').text()
+      ).toBe('Forbidden!')
+      expect(
+        await browser
+          .waitForElementByCss('meta[name="robots"]')
+          .getAttribute('content')
+      ).toBe('noindex')
+    })
+
+    it('should trigger forbidden in a client component', async () => {
+      const browser = await next.browser('/forbidden/clientcomponent')
+      expect(
+        await browser.waitForElementByCss('#forbidden-component').text()
+      ).toBe('Forbidden!')
+      expect(
+        await browser
+          .waitForElementByCss('meta[name="robots"]')
+          .getAttribute('content')
+      ).toBe('noindex')
+    })
+    it('should trigger forbidden client-side', async () => {
+      const browser = await next.browser('/forbidden/client-side')
+      await browser
+        .elementByCss('button')
+        .click()
+        .waitForElementByCss('#forbidden-component')
+      expect(await browser.elementByCss('#forbidden-component').text()).toBe(
+        'Forbidden!'
+      )
+      expect(
+        await browser
+          .waitForElementByCss('meta[name="robots"]')
+          .getAttribute('content')
+      ).toBe('noindex')
+    })
+    it('should trigger forbidden while streaming', async () => {
+      const browser = await next.browser('/forbidden/suspense')
+      expect(
+        await browser.waitForElementByCss('#forbidden-component').text()
+      ).toBe('Forbidden!')
+      expect(
+        await browser
+          .waitForElementByCss('meta[name="robots"]')
+          .getAttribute('content')
+      ).toBe('noindex')
+    })
+  })
+
   describe('bots', () => {
     if (!isNextDeploy) {
       it('should block rendering for bots and return 404 status', async () => {
@@ -387,6 +440,17 @@ describe('app dir - navigation', () => {
         })
 
         expect(res.status).toBe(404)
+        expect(await res.text()).toInclude('"noindex"')
+      })
+
+      it('should block rendering for bots and return 403 status', async () => {
+        const res = await next.fetch('/forbidden/servercomponent', {
+          headers: {
+            'User-Agent': 'Googlebot',
+          },
+        })
+
+        expect(res.status).toBe(403)
         expect(await res.text()).toInclude('"noindex"')
       })
     }
@@ -749,6 +813,14 @@ describe('app dir - navigation', () => {
 
     it('should contain default meta tags in error page', async () => {
       const html = await next.render('/not-found/servercomponent')
+      expect(html).toContain('<meta name="robots" content="noindex"/>')
+      expect(html).toContain(
+        '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
+      )
+    })
+
+    it('should contain default meta tags in 403 page', async () => {
+      const html = await next.render('/forbidden/servercomponent')
       expect(html).toContain('<meta name="robots" content="noindex"/>')
       expect(html).toContain(
         '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
