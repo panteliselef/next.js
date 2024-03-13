@@ -1071,8 +1071,8 @@ importers:
         specifier: 0.26.4
         version: 0.26.4
       '@vercel/turbopack-ecmascript-runtime':
-        specifier: https://gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?a272894a06e6765edd3e36f04b51b8565e7b3e22
-        version: '@gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?a272894a06e6765edd3e36f04b51b8565e7b3e22'
+        specifier: https://gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?6102d1364858df91eef7fa2ef80e10ce3d7b5121
+        version: '@gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?6102d1364858df91eef7fa2ef80e10ce3d7b5121'
       acorn:
         specifier: 8.5.0
         version: 8.5.0
@@ -25494,8 +25494,8 @@ packages:
   /zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
-  '@gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?a272894a06e6765edd3e36f04b51b8565e7b3e22':
-    resolution: {tarball: https://gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?a272894a06e6765edd3e36f04b51b8565e7b3e22}
+  '@gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?6102d1364858df91eef7fa2ef80e10ce3d7b5121':
+    resolution: {tarball: https://gitpkg-fork.vercel.sh/vercel/turbo/crates/turbopack-ecmascript-runtime/js?6102d1364858df91eef7fa2ef80e10ce3d7b5121}
     name: '@vercel/turbopack-ecmascript-runtime'
     version: 0.0.0
     dependencies:
