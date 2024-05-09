@@ -14,7 +14,7 @@ function createSuspenseyComponent(Component, { timeout = 0, expire = 10 }) {
             result = undefined
             promise = undefined
           }, expire)
-          resolve()
+          resolve(true)
         }, timeout)
       })
     throw promise
