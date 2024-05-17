@@ -266,6 +266,7 @@ export {
 export {
   notFound,
   forbidden,
+  unauthorized,
   redirect,
   permanentRedirect,
   RedirectType,

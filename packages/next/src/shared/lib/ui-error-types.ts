@@ -1,5 +1,6 @@
 import { isNotFoundError } from '../../client/components/not-found'
 import { isForbiddenError } from '../../client/components/forbidden'
+import { isUnauthorizedError } from '../../client/components/unauthorized'
 
 const uiErrorsWithStatusCodesMap = {
   'not-found': {
@@ -11,6 +12,11 @@ const uiErrorsWithStatusCodesMap = {
     statusCode: 403,
     matcher: isForbiddenError,
     helperName: 'forbidden',
+  },
+  unauthorized: {
+    statusCode: 401,
+    matcher: isUnauthorizedError,
+    helperName: 'unauthorized',
   },
 } as const
 
