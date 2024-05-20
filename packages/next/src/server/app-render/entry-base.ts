@@ -30,6 +30,7 @@ import {
 import { Postpone } from '../../server/app-render/rsc/postpone'
 import { taintObjectReference } from '../../server/app-render/rsc/taint'
 import {
+  UnauthorizedBoundary,
   ForbiddenBoundary,
   NotFoundBoundary,
 } from '../../client/components/ui-errors-boundaries'
@@ -56,6 +57,7 @@ export {
   Postpone,
   taintObjectReference,
   ClientPageRoot,
+  UnauthorizedBoundary,
   NotFoundBoundary,
   ForbiddenBoundary,
   patchFetch,

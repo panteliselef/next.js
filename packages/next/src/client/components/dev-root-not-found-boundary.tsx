@@ -1,7 +1,11 @@
 'use client'
 
 import React from 'react'
-import { ForbiddenBoundary, NotFoundBoundary } from './ui-errors-boundaries'
+import {
+  ForbiddenBoundary,
+  NotFoundBoundary,
+  UnauthorizedBoundary,
+} from './ui-errors-boundaries'
 import type { UIErrorHelper } from '../../shared/lib/ui-error-types'
 
 export function bailOnUIError(uiError: UIErrorHelper) {
@@ -18,16 +22,23 @@ function NotAllowedRootForbiddenError() {
   return null
 }
 
+function NotAllowedRootUnauthorizedError() {
+  bailOnUIError('unauthorized')
+  return null
+}
+
 export function DevRootUIErrorsBoundary({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <ForbiddenBoundary uiComponent={<NotAllowedRootForbiddenError />}>
-      <NotFoundBoundary uiComponent={<NotAllowedRootNotFoundError />}>
-        {children}
-      </NotFoundBoundary>
-    </ForbiddenBoundary>
+    <UnauthorizedBoundary uiComponent={<NotAllowedRootUnauthorizedError />}>
+      <ForbiddenBoundary uiComponent={<NotAllowedRootForbiddenError />}>
+        <NotFoundBoundary uiComponent={<NotAllowedRootNotFoundError />}>
+          {children}
+        </NotFoundBoundary>
+      </ForbiddenBoundary>
+    </UnauthorizedBoundary>
   )
 }

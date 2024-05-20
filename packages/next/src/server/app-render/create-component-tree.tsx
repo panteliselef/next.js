@@ -15,6 +15,7 @@ import { getTracer } from '../lib/trace/tracer'
 import { NextNodeServerSpan } from '../lib/trace/constants'
 import { StaticGenBailoutError } from '../../client/components/static-generation-bailout'
 import type { LoadingModuleData } from '../../shared/lib/app-router-context.shared-runtime'
+import { UnauthorizedBoundary } from '../../client/components/ui-errors-boundaries'
 
 type ComponentTree = {
   seedData: CacheNodeSeedData
@@ -108,6 +109,7 @@ async function createComponentTreeInternal({
     loading,
     'not-found': notFound,
     forbidden,
+    unauthorized,
   } = components
 
   const injectedCSSWithCurrentLayout = new Set(injectedCSS)
@@ -193,6 +195,16 @@ async function createComponentTreeInternal({
         ctx,
         filePath: forbidden[1],
         getComponent: forbidden[0],
+        injectedCSS: injectedCSSWithCurrentLayout,
+        injectedJS: injectedJSWithCurrentLayout,
+      })
+    : []
+
+  const [Unauthorized, unauthorizedStyles] = unauthorized
+    ? await createComponentStylesAndScripts({
+        ctx,
+        filePath: unauthorized[1],
+        getComponent: unauthorized[0],
         injectedCSS: injectedCSSWithCurrentLayout,
         injectedJS: injectedJSWithCurrentLayout,
       })
@@ -302,48 +314,64 @@ async function createComponentTreeInternal({
     Component = (componentProps: { params: Params }) => {
       const NotFoundComponent = NotFound
       const ForbiddenComponent = Forbidden
+      const UnauthorizedComponent = Unauthorized
       const RootLayoutComponent = LayoutOrPage
-      const RoolLayoutBoundaryComponent = () => {
-        return
-      }
       return (
-        <ForbiddenBoundary
+        <UnauthorizedBoundary
           uiComponent={
-            ForbiddenComponent ? (
+            UnauthorizedComponent ? (
               <>
                 {layerAssets}
                 {/*
                  * We are intentionally only forwarding params to the root layout, as passing any of the parallel route props
-                 * might trigger `forbidden()`, which is not currently supported in the root layout.
+                 * might trigger `unauthorized()`, which is not currently supported in the root layout.
                  */}
                 <RootLayoutComponent params={componentProps.params}>
-                  {forbiddenStyles}
-                  <ForbiddenComponent />
+                  {unauthorizedStyles}
+                  <UnauthorizedComponent />
                 </RootLayoutComponent>
               </>
             ) : undefined
           }
         >
-          <NotFoundBoundary
+          <ForbiddenBoundary
             uiComponent={
-              NotFoundComponent ? (
+              ForbiddenComponent ? (
                 <>
                   {layerAssets}
                   {/*
                    * We are intentionally only forwarding params to the root layout, as passing any of the parallel route props
-                   * might trigger `notFound()`, which is not currently supported in the root layout.
+                   * might trigger `forbidden()`, which is not currently supported in the root layout.
                    */}
                   <RootLayoutComponent params={componentProps.params}>
-                    {notFoundStyles}
-                    <NotFoundComponent />
+                    {forbiddenStyles}
+                    <ForbiddenComponent />
                   </RootLayoutComponent>
                 </>
               ) : undefined
             }
           >
-            <RootLayoutComponent {...componentProps} />
-          </NotFoundBoundary>
-        </ForbiddenBoundary>
+            <NotFoundBoundary
+              uiComponent={
+                NotFoundComponent ? (
+                  <>
+                    {layerAssets}
+                    {/*
+                     * We are intentionally only forwarding params to the root layout, as passing any of the parallel route props
+                     * might trigger `notFound()`, which is not currently supported in the root layout.
+                     */}
+                    <RootLayoutComponent params={componentProps.params}>
+                      {notFoundStyles}
+                      <NotFoundComponent />
+                    </RootLayoutComponent>
+                  </>
+                ) : undefined
+              }
+            >
+              <RootLayoutComponent {...componentProps} />
+            </NotFoundBoundary>
+          </ForbiddenBoundary>
+        </UnauthorizedBoundary>
       )
     }
   }
@@ -385,6 +413,15 @@ async function createComponentTreeInternal({
         `The default export of forbidden is not a React Component in ${segment}`
       )
     }
+
+    if (
+      typeof Unauthorized !== 'undefined' &&
+      !isValidElementType(Unauthorized)
+    ) {
+      throw new Error(
+        `The default export of unauthorized is not a React Component in ${segment}`
+      )
+    }
   }
 
   // Handle dynamic segment params.
@@ -424,6 +461,9 @@ async function createComponentTreeInternal({
 
         const forbiddenComponent =
           Forbidden && isChildrenRouteKey ? <Forbidden /> : undefined
+
+        const unauthorizedComponent =
+          Unauthorized && isChildrenRouteKey ? <Unauthorized /> : undefined
 
         // if we're prefetching and that there's a Loading component, we bail out
         // otherwise we keep rendering for the prefetch.
@@ -525,6 +565,8 @@ async function createComponentTreeInternal({
             notFoundStyles={notFoundStyles}
             forbidden={forbiddenComponent}
             forbiddenStyles={forbiddenStyles}
+            unauthorized={unauthorizedComponent}
+            unauthorizedStyles={unauthorizedStyles}
             styles={currentStyles}
           />,
           childCacheNodeSeedData,

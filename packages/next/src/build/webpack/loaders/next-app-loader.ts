@@ -58,6 +58,7 @@ type AppLoader = webpack.LoaderDefinitionFunction<AppLoaderOptions>
 const UI_FILE_TYPES = {
   'not-found': 'not-found',
   forbidden: 'forbidden',
+  unauthorized: 'unauthorized',
 } as const
 
 const FILE_TYPES = {
@@ -75,6 +76,7 @@ const PARALLEL_CHILDREN_SEGMENT = 'children$'
 const defaultUIErrorPaths: { [k in keyof typeof UI_FILE_TYPES]: string } = {
   'not-found': 'next/dist/client/components/not-found-error',
   forbidden: 'next/dist/client/components/forbidden-error',
+  unauthorized: 'next/dist/client/components/unauthorized-error',
 }
 
 const defaultGlobalErrorPath = 'next/dist/client/components/error-boundary'
