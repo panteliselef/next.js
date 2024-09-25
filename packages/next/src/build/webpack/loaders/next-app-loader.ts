@@ -35,6 +35,7 @@ import {
 import { getFilesInDir } from '../../../lib/get-files-in-dir'
 import type { PageExtensions } from '../../page-extensions-type'
 import { PARALLEL_ROUTE_DEFAULT_PATH } from '../../../client/components/parallel-route-default'
+import type { Compilation } from 'webpack'
 
 export type AppLoaderOptions = {
   name: string
@@ -49,25 +50,39 @@ export type AppLoaderOptions = {
   tsconfigPath?: string
   isDev?: true
   basePath: string
+  flyingShuttle?: boolean
   nextConfigOutput?: NextConfig['output']
   nextConfigExperimentalUseEarlyImport?: true
   middlewareConfig: string
 }
 type AppLoader = webpack.LoaderDefinitionFunction<AppLoaderOptions>
 
+const UI_FILE_TYPES = {
+  'not-found': 'not-found',
+  forbidden: 'forbidden',
+} as const
+
+type UIFileType = keyof typeof UI_FILE_TYPES
+
+const UI_FILE_TYPES_AS_VALUES = Object.keys(UI_FILE_TYPES) as UIFileType[]
+
 const FILE_TYPES = {
   layout: 'layout',
   template: 'template',
   error: 'error',
   loading: 'loading',
-  'not-found': 'not-found',
+  ...UI_FILE_TYPES,
 } as const
 
 const GLOBAL_ERROR_FILE_TYPE = 'global-error'
 const PAGE_SEGMENT = 'page$'
 const PARALLEL_CHILDREN_SEGMENT = 'children$'
 
-const defaultNotFoundPath = 'next/dist/client/components/not-found-error'
+const defaultUIErrorPaths: Record<UIFileType, string> = {
+  'not-found': 'next/dist/client/components/not-found-error',
+  forbidden: 'next/dist/client/components/forbidden-error',
+}
+
 const defaultGlobalErrorPath = 'next/dist/client/components/error-boundary'
 const defaultLayoutPath = 'next/dist/client/components/default-layout'
 
@@ -173,9 +188,13 @@ async function createTreeCodeFromPath(
     metadataResolver,
     pageExtensions,
     basePath,
+    buildInfo,
+    flyingShuttle,
     collectedDeclarations,
   }: {
     page: string
+    flyingShuttle?: boolean
+    buildInfo: ReturnType<typeof getModuleBuildInfo>
     resolveDir: DirResolver
     resolver: PathResolver
     metadataResolver: MetadataResolver
@@ -198,9 +217,13 @@ async function createTreeCodeFromPath(
 
   const isDefaultNotFound = isAppBuiltinNotFoundPage(pagePath)
   const appDirPrefix = isDefaultNotFound ? APP_DIR_ALIAS : splittedPath[0]
-  const hasRootNotFound = await resolver(
-    `${appDirPrefix}/${FILE_TYPES['not-found']}`
+
+  const uiErrorPaths = await Promise.all(
+    UI_FILE_TYPES_AS_VALUES.map((fileType) =>
+      resolver(`${appDirPrefix}/${UI_FILE_TYPES[fileType]}`)
+    )
   )
+
   const pages: string[] = []
 
   let rootLayout: string | undefined
@@ -348,22 +371,55 @@ async function createTreeCodeFromPath(
         })
       )
 
-      const definedFilePaths = filePaths.filter(
-        ([, filePath]) => filePath !== undefined
-      ) as [ValueOf<typeof FILE_TYPES>, string][]
+      const definedFilePaths = filePaths.filter(([, filePath]) => {
+        if (filePath !== undefined) {
+          if (flyingShuttle && buildInfo.route?.relatedModules) {
+            buildInfo.route.relatedModules.push(filePath)
+          }
+          return true
+        }
+        return false
+      }) as [ValueOf<typeof FILE_TYPES>, string][]
 
-      // Add default not found error as root not found if not present
-      const hasNotFoundFile = definedFilePaths.some(
-        ([type]) => type === 'not-found'
+      // Mark used ui error files by the route segment
+      function createFileTypeCounters(
+        paths: typeof filePaths,
+        types: UIFileType[]
+      ) {
+        const dictionary = new Map<string, number>()
+        for (const [type] of paths) {
+          const item = dictionary.get(type)
+          if (item) {
+            dictionary.set(type, item + 1)
+          } else {
+            dictionary.set(type, 1)
+          }
+        }
+
+        return types.map((t) => (dictionary.get(t) || 0) >= 1)
+      }
+
+      // Check if ui error files exist for this segment path
+      const fileTypeCounters = createFileTypeCounters(
+        definedFilePaths,
+        UI_FILE_TYPES_AS_VALUES
       )
+
       // If the first layer is a group route, we treat it as root layer
       const isFirstLayerGroupRoute =
         segments.length === 1 &&
         subSegmentPath.filter((seg) => isGroupSegment(seg)).length === 1
-      if ((isRootLayer || isFirstLayerGroupRoute) && !hasNotFoundFile) {
-        // If you already have a root not found, don't insert default not-found to group routes root
-        if (!(hasRootNotFound && isFirstLayerGroupRoute)) {
-          definedFilePaths.push(['not-found', defaultNotFoundPath])
+
+      for (let i = 0; i < UI_FILE_TYPES_AS_VALUES.length; i++) {
+        const fileType = UI_FILE_TYPES_AS_VALUES[i]
+        const hasFileType = fileTypeCounters[i]
+        const hasRootFileType = uiErrorPaths[i]
+
+        if ((isRootLayer || isFirstLayerGroupRoute) && !hasFileType) {
+          // If you already have a root file, don't insert default file to group routes root
+          if (!(hasRootFileType && isFirstLayerGroupRoute)) {
+            definedFilePaths.push([fileType, defaultUIErrorPaths[fileType]])
+          }
         }
       }
 
@@ -408,7 +464,7 @@ async function createTreeCodeFromPath(
       if (isNotFoundRoute && normalizedParallelKey === 'children') {
         const notFoundPath =
           definedFilePaths.find(([type]) => type === 'not-found')?.[1] ??
-          defaultNotFoundPath
+          defaultUIErrorPaths['not-found']
 
         const varName = `notFound${nestedCollectedDeclarations.length}`
         nestedCollectedDeclarations.push([varName, notFoundPath])
@@ -510,6 +566,10 @@ function createAbsolutePath(appDir: string, pathToTurnAbsolute: string) {
   )
 }
 
+const filesInDirMapMap: WeakMap<
+  Compilation,
+  Map<string, Promise<Set<string>>>
+> = new WeakMap()
 const nextAppLoader: AppLoader = async function nextAppLoader() {
   const loaderOptions = this.getOptions()
   const {
@@ -524,6 +584,7 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
     nextConfigOutput,
     preferredRegion,
     basePath,
+    flyingShuttle,
     middlewareConfig: middlewareConfigBase64,
     nextConfigExperimentalUseEarlyImport,
   } = loaderOptions
@@ -539,6 +600,7 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
     absolutePagePath: createAbsolutePath(appDir, pagePath),
     preferredRegion,
     middlewareConfig,
+    relatedModules: [],
   }
 
   const extensions = pageExtensions.map((extension) => `.${extension}`)
@@ -621,20 +683,30 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
   // This can be more efficient than checking them with `fs.stat` one by one
   // because all the thousands of files are likely in a few possible directories.
   // Note that it should only be cached for this compilation, not globally.
-  const filesInDir = new Map<string, Set<string>>()
   const fileExistsInDirectory = async (dirname: string, fileName: string) => {
-    const existingFiles = filesInDir.get(dirname)
-    if (existingFiles) {
-      return existingFiles.has(fileName)
+    // I don't think we should ever hit this code path, but if we do we should handle it gracefully.
+    if (this._compilation === undefined) {
+      try {
+        return (await getFilesInDir(dirname).catch(() => new Set())).has(
+          fileName
+        )
+      } catch (e) {
+        return false
+      }
     }
-    try {
-      const files = await getFilesInDir(dirname)
-      const fileNames = new Set<string>(files)
-      filesInDir.set(dirname, fileNames)
-      return fileNames.has(fileName)
-    } catch (err) {
-      return false
+    const map =
+      filesInDirMapMap.get(this._compilation) ||
+      new Map<string, Promise<Set<string>>>()
+    if (!filesInDirMapMap.has(this._compilation)) {
+      filesInDirMapMap.set(this._compilation, map)
     }
+    if (!map.has(dirname)) {
+      map.set(
+        dirname,
+        getFilesInDir(dirname).catch(() => new Set())
+      )
+    }
+    return ((await map.get(dirname)) || new Set()).has(fileName)
   }
 
   const resolver: PathResolver = async (pathname) => {
@@ -708,6 +780,8 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
     pageExtensions,
     basePath,
     collectedDeclarations,
+    buildInfo,
+    flyingShuttle,
   })
 
   if (!treeCodeResult.rootLayout) {
@@ -746,7 +820,7 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
       }
 
       // Clear fs cache, get the new result with the created root layout.
-      filesInDir.clear()
+      if (this._compilation) filesInDirMapMap.get(this._compilation)?.clear()
       treeCodeResult = await createTreeCodeFromPath(pagePath, {
         page,
         resolveDir,
@@ -757,6 +831,8 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
         pageExtensions,
         basePath,
         collectedDeclarations,
+        buildInfo,
+        flyingShuttle,
       })
     }
   }
@@ -786,13 +862,17 @@ const nextAppLoader: AppLoader = async function nextAppLoader() {
       ? // Evaluate the imported modules early in the generated code
         collectedDeclarations
           .map(([varName, modulePath]) => {
-            return `import * as ${varName}_ from ${JSON.stringify(modulePath)};\nconst ${varName} = () => ${varName}_;\n`
+            return `import * as ${varName}_ from ${JSON.stringify(
+              modulePath
+            )};\nconst ${varName} = () => ${varName}_;\n`
           })
           .join('')
       : // Lazily evaluate the imported modules in the generated code
         collectedDeclarations
           .map(([varName, modulePath]) => {
-            return `const ${varName} = () => import(/* webpackMode: "eager" */ ${JSON.stringify(modulePath)});\n`
+            return `const ${varName} = () => import(/* webpackMode: "eager" */ ${JSON.stringify(
+              modulePath
+            )});\n`
           })
           .join('')
 

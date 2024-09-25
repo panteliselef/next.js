@@ -32,10 +32,10 @@ import { ErrorBoundary } from './error-boundary'
 import { matchSegment } from './match-segments'
 import { handleSmoothScroll } from '../../shared/lib/router/utils/handle-smooth-scroll'
 import { RedirectBoundary } from './redirect-boundary'
-import { NotFoundBoundary } from './not-found-boundary'
 import { getSegmentValue } from './router-reducer/reducers/get-segment-value'
 import { createRouterCacheKey } from './router-reducer/create-router-cache-key'
 import { hasInterceptionRouteInCurrentTree } from './router-reducer/reducers/has-interception-route-in-current-tree'
+import { UIErrorsBoundary } from './ui-errors-boundaries'
 
 /**
  * Add refetch marker to router state at the point of the current layout segment.
@@ -98,27 +98,13 @@ const __DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE = (
 function findDOMNode(
   instance: React.ReactInstance | null | undefined
 ): Element | Text | null {
+  // Tree-shake for server bundle
+  if (typeof window === 'undefined') return null
+
   // __DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.findDOMNode is null during module init.
   // We need to lazily reference it.
   const internal_reactDOMfindDOMNode =
     __DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE.findDOMNode
-  // Tree-shake for server bundle
-  if (typeof window === 'undefined') return null
-  // Only apply strict mode warning when not in production
-  if (process.env.NODE_ENV !== 'production') {
-    const originalConsoleError = console.error
-    try {
-      console.error = (...messages) => {
-        // Ignore strict mode warning for the findDomNode call below
-        if (!messages[0].includes('Warning: %s is deprecated in StrictMode.')) {
-          originalConsoleError(...messages)
-        }
-      }
-      return internal_reactDOMfindDOMNode(instance)
-    } finally {
-      console.error = originalConsoleError!
-    }
-  }
   return internal_reactDOMfindDOMNode(instance)
 }
 
@@ -364,8 +350,6 @@ function InnerLayoutRouter({
       rsc: null,
       prefetchRsc: null,
       head: null,
-      layerAssets: null,
-      prefetchLayerAssets: null,
       prefetchHead: null,
       parallelRoutes: new Map(),
       loading: null,
@@ -422,9 +406,11 @@ function InnerLayoutRouter({
       const includeNextUrl = hasInterceptionRouteInCurrentTree(fullTree)
       childNode.lazyData = lazyData = fetchServerResponse(
         new URL(url, location.origin),
-        refetchTree,
-        includeNextUrl ? context.nextUrl : null,
-        buildId
+        {
+          flightRouterState: refetchTree,
+          nextUrl: includeNextUrl ? context.nextUrl : null,
+          buildId,
+        }
       ).then((serverResponse) => {
         startTransition(() => {
           changeByServerResponse({
@@ -441,23 +427,6 @@ function InnerLayoutRouter({
     use(unresolvedThenable) as never
   }
 
-  // We use `useDeferredValue` to handle switching between the prefetched and
-  // final values. The second argument is returned on initial render, then it
-  // re-renders with the first argument. We only use the prefetched layer assets
-  // if they are available. Otherwise, we use the non-prefetched version.
-  const resolvedPrefetchLayerAssets =
-    childNode.prefetchLayerAssets !== null
-      ? childNode.prefetchLayerAssets
-      : childNode.layerAssets
-
-  const layerAssets = useDeferredValue(
-    childNode.layerAssets,
-    // @ts-expect-error The second argument to `useDeferredValue` is only
-    // available in the experimental builds. When its disabled, it will always
-    // return `cache.layerAssets`.
-    resolvedPrefetchLayerAssets
-  )
-
   // If we get to this point, then we know we have something we can render.
   const subtree = (
     // The layout router context narrows down tree and childNodes at each level.
@@ -470,7 +439,6 @@ function InnerLayoutRouter({
         loading: childNode.loading,
       }}
     >
-      {layerAssets}
       {resolvedRsc}
     </LayoutRouterContext.Provider>
   )
@@ -531,7 +499,8 @@ export default function OuterLayoutRouter({
   template,
   notFound,
   notFoundStyles,
-  styles,
+  forbidden,
+  forbiddenStyles,
 }: {
   parallelRouterKey: string
   segmentPath: FlightSegmentPath
@@ -543,7 +512,8 @@ export default function OuterLayoutRouter({
   template: React.ReactNode
   notFound: React.ReactNode | undefined
   notFoundStyles: React.ReactNode | undefined
-  styles?: React.ReactNode
+  forbidden: React.ReactNode | undefined
+  forbiddenStyles: React.ReactNode | undefined
 }) {
   const context = useContext(LayoutRouterContext)
   if (!context) {
@@ -576,7 +546,6 @@ export default function OuterLayoutRouter({
 
   return (
     <>
-      {styles}
       {preservedSegments.map((preservedSegment) => {
         const preservedSegmentValue = getSegmentValue(preservedSegment)
         const cacheKey = createRouterCacheKey(preservedSegment)
@@ -606,9 +575,15 @@ export default function OuterLayoutRouter({
                     loadingStyles={loading?.[1]}
                     loadingScripts={loading?.[2]}
                   >
-                    <NotFoundBoundary
-                      notFound={notFound}
-                      notFoundStyles={notFoundStyles}
+                    <UIErrorsBoundary
+                      not-found={{
+                        component: notFound,
+                        styles: notFoundStyles,
+                      }}
+                      forbidden={{
+                        component: forbidden,
+                        styles: forbiddenStyles,
+                      }}
                     >
                       <RedirectBoundary>
                         <InnerLayoutRouter
@@ -623,7 +598,7 @@ export default function OuterLayoutRouter({
                           }
                         />
                       </RedirectBoundary>
-                    </NotFoundBoundary>
+                    </UIErrorsBoundary>
                   </LoadingBoundary>
                 </ErrorBoundary>
               </ScrollAndFocusHandler>

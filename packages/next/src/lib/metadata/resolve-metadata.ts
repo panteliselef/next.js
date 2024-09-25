@@ -37,6 +37,7 @@ import {
   resolveThemeColor,
   resolveVerification,
   resolveItunes,
+  resolveFacebook,
 } from './resolvers/resolve-basics'
 import { resolveIcons } from './resolvers/resolve-icons'
 import { getTracer } from '../../server/lib/trace/tracer'
@@ -198,6 +199,10 @@ function mergeMetadata({
         )
         break
       }
+      case 'facebook':
+        target.facebook = resolveFacebook(source.facebook)
+        break
+
       case 'verification':
         target.verification = resolveVerification(source.verification)
         break
@@ -414,6 +419,7 @@ export async function collectMetadata({
   errorMetadataItem: MetadataItems[number]
   props: any
   route: string
+  // TODO(@panteliselef): Handle this
   errorConvention?: 'not-found'
 }) {
   let mod

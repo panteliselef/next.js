@@ -13,6 +13,10 @@ const basePath = process.env.BASE_PATH ?? ''
 describe('app-custom-routes', () => {
   const { next, isNextDeploy, isNextDev, isNextStart } = nextTestSetup({
     files: __dirname,
+    dependencies: {
+      // pin with repo's version of node-fetch
+      '@types/node-fetch': '2.6.1',
+    },
   })
 
   describe('works with api prefix correctly', () => {
@@ -513,6 +517,22 @@ describe('app-custom-routes', () => {
         const res = await next.fetch(basePath + '/hooks/not-found/edge')
 
         expect(res.status).toEqual(404)
+        expect(await res.text()).toBeEmpty()
+      })
+    })
+
+    describe('forbidden', () => {
+      it('can respond correctly in nodejs', async () => {
+        const res = await next.fetch(basePath + '/hooks/forbidden')
+
+        expect(res.status).toEqual(403)
+        expect(await res.text()).toBeEmpty()
+      })
+
+      it('can respond correctly in edge', async () => {
+        const res = await next.fetch(basePath + '/hooks/forbidden/edge')
+
+        expect(res.status).toEqual(403)
         expect(await res.text()).toBeEmpty()
       })
     })
